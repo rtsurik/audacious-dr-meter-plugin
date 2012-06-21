@@ -38,6 +38,7 @@
 
 static void calc_entire_playlist_dr(void);
 static void dr_save_to_file(void);
+static void dr_meter_configure(void);
 
 GtkListStore *dr_tree_model;
 GtkWidget *main_progress_bar;
@@ -93,6 +94,7 @@ static gpointer dr_meter_get_widget (void)
 
 	GtkToolItem *button_properties =  gtk_tool_button_new_from_stock(GTK_STOCK_PROPERTIES);
 	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_properties, -1); 
+	g_signal_connect(button_properties, "clicked", (GCallback) dr_meter_configure, FALSE);
 
 	GtkWidget *dr_tree_view = gtk_tree_view_new();
 
@@ -104,11 +106,11 @@ static gpointer dr_meter_get_widget (void)
 	gtk_tree_view_insert_column_with_attributes (
 		GTK_TREE_VIEW (dr_tree_view), -1, "Title", dr_cell_renderer, "text", 2, NULL );
 	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "DR", dr_cell_renderer, "text", 3, NULL );
+		GTK_TREE_VIEW (dr_tree_view), -1, "DR value", dr_cell_renderer, "text", 3, NULL );
 	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "Peak", dr_cell_renderer, "text", 4, NULL );
+		GTK_TREE_VIEW (dr_tree_view), -1, "Peak (dB)", dr_cell_renderer, "text", 4, NULL );
 	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "RMS", dr_cell_renderer, "text", 5, NULL );
+		GTK_TREE_VIEW (dr_tree_view), -1, "RMS (dB)", dr_cell_renderer, "text", 5, NULL );
 
 	dr_tree_model = gtk_list_store_new (6, 
 		G_TYPE_INT, 
@@ -125,6 +127,12 @@ static gpointer dr_meter_get_widget (void)
 
 	this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 2);
 	g_object_set (G_OBJECT (this_column), "resizable", TRUE, "min-width", 120, NULL);
+
+	this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 3);
+	g_object_set (G_OBJECT (this_column), "resizable", TRUE, "min-width", 50, NULL);
+
+	this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 4);
+	g_object_set (G_OBJECT (this_column), "resizable", TRUE, "min-width", 50, NULL);
 
 	GtkWidget *scrolledTreeContainer = gtk_scrolled_window_new(NULL, NULL);
 	gtk_scrolled_window_add_with_viewport( GTK_SCROLLED_WINDOW(scrolledTreeContainer), dr_tree_view);
@@ -149,6 +157,12 @@ static void dr_meter_cleanup(void) {
 }
 
 static void dr_meter_about(void) {
+
+	static GtkWidget *about_dialog = NULL;
+
+	audgui_simple_message (& about_dialog, GTK_MESSAGE_INFO, "About DR Meter",
+	"Dynamic Range Meter plugin for Audacious.\n\n"
+	"Copyright (c) 2012 Rustam Tsurik");
 }
 
 gint output_open_audio (gint format, gint rate, gint channels) {
@@ -170,10 +184,10 @@ gint output_open_audio (gint format, gint rate, gint channels) {
 	return 1;
 }
 
-void output_set_replaygain_info (ReplayGainInfo * info) {
+void output_set_replaygain_info (ReplayGainInfo *info) {
 }
 
-void output_write_audio (void * data, gint length) {
+void output_write_audio (void *data, gint length) {
 
 	int samples = length / FMT_SIZEOF (au_format);
 	int frames = samples / au_channels;
@@ -395,6 +409,9 @@ static void calc_entire_playlist_dr( void ) {
 		VFSFile * file = vfs_fopen (entry_filename, "r");		
 		dec_status = decoder_cur->play (& playback_api, entry_filename, file, -1, -1, FALSE);
 		
+		str_unref(cur_track_title);
+		str_unref(cur_track_artist);
+
 		str_unref(entry_filename);
 
 		gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), ((double)i+1)/(double)playlist_entry_count);
@@ -445,7 +462,7 @@ static void dr_meter_configure(void) {
 
 AUD_GENERAL_PLUGIN
 (
-	.name = "DR Meter",
+	.name = "Dynamic Range Meter",
 	.cleanup = dr_meter_cleanup,
 	.get_widget = dr_meter_get_widget,
 	.init = dr_meter_init,
