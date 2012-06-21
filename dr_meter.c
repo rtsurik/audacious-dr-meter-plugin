@@ -37,6 +37,7 @@
 #include <math.h>
 
 static void calc_entire_playlist_dr(void);
+static void dr_save_to_file(void);
 
 GtkListStore *dr_tree_model;
 GtkWidget *main_progress_bar;
@@ -88,6 +89,7 @@ static gpointer dr_meter_get_widget (void)
 
 	GtkToolItem *button_save =  gtk_tool_button_new_from_stock(GTK_STOCK_SAVE);
 	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_save, -1); 
+	g_signal_connect(button_save, "clicked", (GCallback) dr_save_to_file, FALSE);
 
 	GtkToolItem *button_properties =  gtk_tool_button_new_from_stock(GTK_STOCK_PROPERTIES);
 	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_properties, -1); 
@@ -402,6 +404,34 @@ static void calc_entire_playlist_dr( void ) {
 	gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar), 0);
 	gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "Done");
 	while( gtk_events_pending() ) gtk_main_iteration();
+}
+
+static void dr_save_to_file(void) {
+	
+	GtkWidget *dialog;
+
+	dialog = gtk_file_chooser_dialog_new ("Save File",
+		NULL,
+		GTK_FILE_CHOOSER_ACTION_SAVE,
+		GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+		GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
+		NULL);
+	gtk_file_chooser_set_do_overwrite_confirmation (GTK_FILE_CHOOSER (dialog), TRUE);
+
+	gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (dialog), g_get_home_dir());
+	gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER (dialog), "dr_meter_data.txt");
+
+	if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
+	{
+		char *filename;
+
+		filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
+		// save data to a file here
+
+		g_free (filename);
+	}
+
+	gtk_widget_destroy (dialog);
 }
 
 gboolean dr_meter_init(void) {
