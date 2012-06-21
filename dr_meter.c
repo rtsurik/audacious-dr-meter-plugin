@@ -80,21 +80,17 @@ static gpointer dr_meter_get_widget (void)
 	main_progress_bar = gtk_progress_bar_new();
 	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), 0);
 
-	GtkWidget *menu_bar = gtk_menu_bar_new();
-	GtkWidget *menu_item_dr = gtk_menu_item_new_with_mnemonic("_Dynamic Range");
-	GtkWidget *menu_item_help = gtk_menu_item_new_with_mnemonic("_Help");
+	GtkWidget *toolbar = gtk_toolbar_new();
 
-	GtkWidget *menu_item_drsub = gtk_menu_new();
-	gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item_dr), menu_item_drsub);
-	GtkWidget *menu_item_dr_sub_entire = gtk_menu_item_new_with_mnemonic("_Entire playlist");
-	GtkWidget *menu_item_dr_sub_selected = gtk_menu_item_new_with_mnemonic("_Selected tracks");
-	gtk_menu_shell_insert(GTK_MENU_SHELL(menu_item_drsub), menu_item_dr_sub_entire, 0);
-	gtk_menu_shell_insert(GTK_MENU_SHELL(menu_item_drsub), menu_item_dr_sub_selected, 1);
+	GtkToolItem *button_exec =  gtk_tool_button_new_from_stock(GTK_STOCK_EXECUTE);
+	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_exec, -1); 
+	g_signal_connect(button_exec, "clicked", (GCallback) calc_entire_playlist_dr, FALSE);
 
-	gtk_menu_shell_insert(GTK_MENU_SHELL(menu_bar), menu_item_dr, 0);
-	gtk_menu_shell_insert(GTK_MENU_SHELL(menu_bar), menu_item_help, 1);
+	GtkToolItem *button_save =  gtk_tool_button_new_from_stock(GTK_STOCK_SAVE);
+	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_save, -1); 
 
-	g_signal_connect(menu_item_dr_sub_entire, "activate", (GCallback) calc_entire_playlist_dr, FALSE);
+	GtkToolItem *button_properties =  gtk_tool_button_new_from_stock(GTK_STOCK_PROPERTIES);
+	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_properties, -1); 
 
 	GtkWidget *dr_tree_view = gtk_tree_view_new();
 
@@ -131,12 +127,12 @@ static gpointer dr_meter_get_widget (void)
 	GtkWidget *scrolledTreeContainer = gtk_scrolled_window_new(NULL, NULL);
 	gtk_scrolled_window_add_with_viewport( GTK_SCROLLED_WINDOW(scrolledTreeContainer), dr_tree_view);
 
-	gtk_grid_attach(GTK_GRID(main_grid), menu_bar, 0, 0, 1, 1);
+	gtk_grid_attach(GTK_GRID(main_grid), toolbar, 0, 0, 1, 1);
 
 	gtk_widget_set_vexpand (dr_tree_view, TRUE);
 	gtk_widget_set_valign (dr_tree_view, GTK_ALIGN_FILL);
 
-	gtk_grid_attach_next_to(GTK_GRID(main_grid), scrolledTreeContainer, menu_bar, GTK_POS_BOTTOM, 1, 1);
+	gtk_grid_attach_next_to(GTK_GRID(main_grid), scrolledTreeContainer, toolbar, GTK_POS_BOTTOM, 1, 1);
 	gtk_grid_attach_next_to(GTK_GRID(main_grid), main_progress_bar, scrolledTreeContainer, GTK_POS_BOTTOM, 1, 1);
 	gtk_grid_attach_next_to(GTK_GRID(main_grid), status_bar, main_progress_bar, GTK_POS_BOTTOM, 1, 1);
 
@@ -285,15 +281,15 @@ void output_close_audio (void) {
 	GtkTreeIter newItem;
 
 	gtk_list_store_append (dr_tree_model, &newItem );
-    gtk_list_store_set (
-    	dr_tree_model, &newItem, 
-    	0, cur_track_no, 
-    	1, cur_track_artist, 
-    	2, cur_track_title,
-    	3, dr_txt, 
-    	4, peak_txt,
-    	5, rms_txt,
-    	-1 );
+	gtk_list_store_set (
+		dr_tree_model, &newItem, 
+		0, cur_track_no, 
+		1, cur_track_artist, 
+		2, cur_track_title,
+		3, dr_txt, 
+		4, peak_txt,
+		5, rms_txt,
+		-1 );
 }
 
 void output_pause (gboolean pause) {
@@ -419,11 +415,11 @@ static void dr_meter_configure(void) {
 
 AUD_GENERAL_PLUGIN
 (
-    .name = "DR Meter",
-    .cleanup = dr_meter_cleanup,
-    .get_widget = dr_meter_get_widget,
-    .init = dr_meter_init,
-    .about = dr_meter_about,
-    .configure = dr_meter_configure
+	.name = "DR Meter",
+	.cleanup = dr_meter_cleanup,
+	.get_widget = dr_meter_get_widget,
+	.init = dr_meter_init,
+	.about = dr_meter_about,
+	.configure = dr_meter_configure
 )
 
