@@ -34,19 +34,30 @@
 #include <libaudgui/libaudgui.h>
 #include <libaudgui/libaudgui-gtk.h>
 
+#include "dr_playlist.h"
 #include <math.h>
+#include <stdlib.h>
+
+#define DR_METER_VERSION "20120623-alpha"
 
 static void calc_entire_playlist_dr(void);
 static void dr_save_to_file(void);
 static void dr_meter_configure(void);
+
+
+tracks_list_t *playlist;
+
 
 GtkListStore *dr_tree_model;
 GtkWidget *main_progress_bar;
 GtkWidget *status_bar;
 
 gint cur_track_no = 1;
-char *cur_track_title;
-char *cur_track_artist;
+
+char *cur_track_title;      // these cur_track_x vars need to be moved
+char *cur_track_artist;     // under the calc_entire_playlist_dr() function
+char *cur_track_album;      // as soon as we've switched to the playlist struct
+long cur_track_duration;    
 
 gint au_format;
 gint au_channels;
@@ -56,7 +67,7 @@ gint frames_per_three_sec;
 
 gint frames_counter;
 
-#define CHANNELS_MAX 8
+#define CHANNELS_MAX 8          // this needs to be changed to dynamic arrays
 double tmp_peak[CHANNELS_MAX];
 double tmp_rms_sum[CHANNELS_MAX];
 
@@ -71,402 +82,575 @@ static void playback_start (gpointer data, GtkWidget *area)
     gtk_widget_queue_draw(area);
 }
 
+// AUD_GENERAL_PLUGIN->get_widget callback
 static gpointer dr_meter_get_widget (void)
 {
-	
-	GtkWidget *main_grid = gtk_grid_new();
+    
+    GtkWidget *main_grid = gtk_grid_new();
 
-	status_bar = gtk_statusbar_new();	
-	gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "status message");
+    status_bar = gtk_statusbar_new();   
+    gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "status message");
 
-	main_progress_bar = gtk_progress_bar_new();
-	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), 0);
+    main_progress_bar = gtk_progress_bar_new();
+    gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), 0);
 
-	GtkWidget *toolbar = gtk_toolbar_new();
+    GtkWidget *toolbar = gtk_toolbar_new();
 
-	GtkToolItem *button_exec =  gtk_tool_button_new_from_stock(GTK_STOCK_EXECUTE);
-	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_exec, -1); 
-	g_signal_connect(button_exec, "clicked", (GCallback) calc_entire_playlist_dr, FALSE);
+    GtkToolItem *button_exec = 
+        gtk_tool_button_new_from_stock(GTK_STOCK_EXECUTE);
 
-	GtkToolItem *button_save =  gtk_tool_button_new_from_stock(GTK_STOCK_SAVE);
-	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_save, -1); 
-	g_signal_connect(button_save, "clicked", (GCallback) dr_save_to_file, FALSE);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_exec, -1); 
+    g_signal_connect(button_exec, 
+        "clicked", 
+        (GCallback) calc_entire_playlist_dr, 
+        FALSE);
 
-	GtkToolItem *button_properties =  gtk_tool_button_new_from_stock(GTK_STOCK_PROPERTIES);
-	gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_properties, -1); 
-	g_signal_connect(button_properties, "clicked", (GCallback) dr_meter_configure, FALSE);
+    GtkToolItem *button_save =  gtk_tool_button_new_from_stock(GTK_STOCK_SAVE);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_save, -1); 
+    g_signal_connect(button_save, 
+        "clicked", 
+        (GCallback) dr_save_to_file, 
+        FALSE);
 
-	GtkWidget *dr_tree_view = gtk_tree_view_new();
+    GtkToolItem *button_properties =  
+        gtk_tool_button_new_from_stock(GTK_STOCK_PROPERTIES);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_properties, -1); 
+    g_signal_connect(button_properties, 
+        "clicked", 
+        (GCallback) dr_meter_configure, 
+        FALSE);
 
-	GtkCellRenderer *dr_cell_renderer = gtk_cell_renderer_text_new();
-	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "#", dr_cell_renderer, "text", 0, NULL );
-	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "Artist", dr_cell_renderer, "text", 1, NULL );
-	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "Title", dr_cell_renderer, "text", 2, NULL );
-	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "DR value", dr_cell_renderer, "text", 3, NULL );
-	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "Peak (dB)", dr_cell_renderer, "text", 4, NULL );
-	gtk_tree_view_insert_column_with_attributes (
-		GTK_TREE_VIEW (dr_tree_view), -1, "RMS (dB)", dr_cell_renderer, "text", 5, NULL );
+    GtkWidget *dr_tree_view = gtk_tree_view_new();
 
-	dr_tree_model = gtk_list_store_new (6, 
-		G_TYPE_INT, 
-		G_TYPE_STRING, 
-		G_TYPE_STRING, 
-		G_TYPE_STRING, 
-		G_TYPE_STRING, 
-		G_TYPE_STRING );
+    GtkCellRenderer *dr_cell_renderer = gtk_cell_renderer_text_new();
+    gtk_tree_view_insert_column_with_attributes (
+        GTK_TREE_VIEW (dr_tree_view), -1, "#", dr_cell_renderer, 
+        "text", 0, NULL );
+    gtk_tree_view_insert_column_with_attributes (
+        GTK_TREE_VIEW (dr_tree_view), -1, "Artist", dr_cell_renderer, 
+        "text", 1, NULL );
+    gtk_tree_view_insert_column_with_attributes (
+        GTK_TREE_VIEW (dr_tree_view), -1, "Title", dr_cell_renderer, 
+        "text", 2, NULL );
+    gtk_tree_view_insert_column_with_attributes (
+        GTK_TREE_VIEW (dr_tree_view), -1, "DR value", dr_cell_renderer, 
+        "text", 3, NULL );
+    gtk_tree_view_insert_column_with_attributes (
+        GTK_TREE_VIEW (dr_tree_view), -1, "Peak (dB)", dr_cell_renderer, 
+        "text", 4, NULL );
+    gtk_tree_view_insert_column_with_attributes (
+        GTK_TREE_VIEW (dr_tree_view), -1, "RMS (dB)", dr_cell_renderer, 
+        "text", 5, NULL );
 
-	gtk_tree_view_set_model (GTK_TREE_VIEW(dr_tree_view), GTK_TREE_MODEL(dr_tree_model) );
+    dr_tree_model = gtk_list_store_new (6, 
+        G_TYPE_INT, 
+        G_TYPE_STRING, 
+        G_TYPE_STRING, 
+        G_TYPE_STRING, 
+        G_TYPE_STRING, 
+        G_TYPE_STRING );
 
-	GtkTreeViewColumn *this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 1);
-	g_object_set (G_OBJECT (this_column), "resizable", TRUE, "min-width", 120, NULL);
+    gtk_tree_view_set_model (GTK_TREE_VIEW(dr_tree_view), 
+        GTK_TREE_MODEL(dr_tree_model) );
 
-	this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 2);
-	g_object_set (G_OBJECT (this_column), "resizable", TRUE, "min-width", 120, NULL);
+    GtkTreeViewColumn *this_column = 
+        gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 1);
+    g_object_set (G_OBJECT (this_column), 
+    "resizable", TRUE, "min-width", 120, NULL);
 
-	this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 3);
-	g_object_set (G_OBJECT (this_column), "resizable", TRUE, "min-width", 50, NULL);
+    this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 2);
+    g_object_set (G_OBJECT (this_column), 
+    "resizable", TRUE, "min-width", 120, NULL);
 
-	this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 4);
-	g_object_set (G_OBJECT (this_column), "resizable", TRUE, "min-width", 50, NULL);
+    this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 3);
+    g_object_set (G_OBJECT (this_column), 
+    "resizable", TRUE, "min-width", 50, NULL);
 
-	GtkWidget *scrolledTreeContainer = gtk_scrolled_window_new(NULL, NULL);
-	gtk_scrolled_window_add_with_viewport( GTK_SCROLLED_WINDOW(scrolledTreeContainer), dr_tree_view);
+    this_column = gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 4);
+    g_object_set (G_OBJECT (this_column), 
+    "resizable", TRUE, "min-width", 50, NULL);
 
-	gtk_grid_attach(GTK_GRID(main_grid), toolbar, 0, 0, 1, 1);
+    GtkWidget *scrolledTreeContainer = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_add_with_viewport( 
+        GTK_SCROLLED_WINDOW(scrolledTreeContainer), dr_tree_view );
 
-	gtk_widget_set_vexpand (dr_tree_view, TRUE);
-	gtk_widget_set_valign (dr_tree_view, GTK_ALIGN_FILL);
+    gtk_grid_attach(GTK_GRID(main_grid), toolbar, 0, 0, 1, 1);
 
-	gtk_grid_attach_next_to(GTK_GRID(main_grid), scrolledTreeContainer, toolbar, GTK_POS_BOTTOM, 1, 1);
-	gtk_grid_attach_next_to(GTK_GRID(main_grid), main_progress_bar, scrolledTreeContainer, GTK_POS_BOTTOM, 1, 1);
-	gtk_grid_attach_next_to(GTK_GRID(main_grid), status_bar, main_progress_bar, GTK_POS_BOTTOM, 1, 1);
+    gtk_widget_set_vexpand (dr_tree_view, TRUE);
+    gtk_widget_set_valign (dr_tree_view, GTK_ALIGN_FILL);
 
-	gtk_grid_set_row_spacing(GTK_GRID(main_grid), 5);
-	gtk_grid_set_column_homogeneous(GTK_GRID(main_grid), TRUE);
+    gtk_grid_attach_next_to(GTK_GRID(main_grid), 
+        scrolledTreeContainer, toolbar, GTK_POS_BOTTOM, 1, 1);
+    gtk_grid_attach_next_to(GTK_GRID(main_grid), 
+        main_progress_bar, scrolledTreeContainer, GTK_POS_BOTTOM, 1, 1);
+    gtk_grid_attach_next_to(GTK_GRID(main_grid), 
+        status_bar, main_progress_bar, GTK_POS_BOTTOM, 1, 1);
+
+    gtk_grid_set_row_spacing(GTK_GRID(main_grid), 5);
+    gtk_grid_set_column_homogeneous(GTK_GRID(main_grid), TRUE);
 
     return main_grid;
 }
 
 static void dr_meter_cleanup(void) {
-	hook_dissociate("playback begin", (HookFunction) playback_start);
+    hook_dissociate("playback begin", (HookFunction) playback_start);
 }
 
+// AUD_GENERAL_PLUGIN->about callback
 static void dr_meter_about(void) {
 
-	static GtkWidget *about_dialog = NULL;
+    static GtkWidget *about_dialog = NULL;
 
-	audgui_simple_message (& about_dialog, GTK_MESSAGE_INFO, "About DR Meter",
-	"Dynamic Range Meter plugin for Audacious.\n\n"
-	"Copyright (c) 2012 Rustam Tsurik");
+    audgui_simple_message (& about_dialog, GTK_MESSAGE_INFO, "About DR Meter",
+    "Dynamic Range Meter plugin for Audacious.\n\n"
+    "Copyright (c) 2012 Rustam Tsurik");
 }
 
+// OutputAPI->open_audio:
+// playback starts here, init the variables
 gint output_open_audio (gint format, gint rate, gint channels) {
 
-	au_format = format;
-	au_channels = channels;
-	au_rate = rate;
-	bytes_per_sample = FMT_SIZEOF(au_format);
-	frames_per_three_sec = rate * 3;
+    au_format = format;
+    au_channels = channels;
+    au_rate = rate;
+    bytes_per_sample = FMT_SIZEOF(au_format);
+    frames_per_three_sec = rate * 3;
 
-	frames_counter = 0;
-	fragments_counter = 0;
+    frames_counter = 0;
+    fragments_counter = 0;
 
-	gint ichn;
-	for (ichn = 0; ichn < au_channels; ichn++){
-		tmp_rms_sum[ichn] = 0.0; tmp_peak[ichn] = 0.0;
-	}
-	
-	return 1;
+    gint ichn;
+    for (ichn = 0; ichn < au_channels; ichn++){
+        tmp_rms_sum[ichn] = 0.0; tmp_peak[ichn] = 0.0;
+    }
+    
+    track_info_t *tmp = &playlist->tracks[ playlist->now_playing ];
+    tmp->channels = channels;
+
+    return 1;
 }
 
+// OutputAPI->set_replaygain_info
 void output_set_replaygain_info (ReplayGainInfo *info) {
 }
 
+// OutputAPI->write_audio:
+// this callback function receives decoded audio data
+// which we process in here and use to calculate DR
 void output_write_audio (void *data, gint length) {
 
-	int samples = length / FMT_SIZEOF (au_format);
-	int frames = samples / au_channels;
+    // actually, I'm not sure if the length is always 
+    // multiple of (channels * bytes per sample), suppose it is 
+    // but this needs to be re-checked
+            
+    int samples = length / FMT_SIZEOF (au_format);
+    int frames = samples / au_channels;
 
-	float *new = g_malloc(sizeof(float) * samples);
+    // allocate memory for the received data
+    float *new = g_malloc(sizeof(float) * samples);
 
-	if (au_format != FMT_FLOAT)
-	{
-		audio_from_int (data, au_format, new, samples);
+    if (au_format != FMT_FLOAT)
+    {   // if integer, convert to float
+        audio_from_int (data, au_format, new, samples);
+    } else { // if float, leave as is: just copy
+        memcpy(new, data, sizeof (float) * samples);
+    }
 
-	} else {
-		memcpy(new, data, sizeof (float) * samples);
-	}
+    static int i, ichn;
+    static double tmp_value;
 
-	static int i, ichn;
-	static double tmp_value;
+    for (i = 0; i < frames; i++){
 
-	for (i = 0; i < frames; i++){
+        for (ichn = 0; ichn < au_channels; ichn++){
+            tmp_value = fabs(new[i*au_channels+ichn]);
+            tmp_rms_sum[ichn] +=  tmp_value * tmp_value; 
+            if ( tmp_peak[ichn] < tmp_value ) {
+                tmp_peak[ichn] = tmp_value;
+            }
+        }
 
-		for (ichn = 0; ichn < au_channels; ichn++){
-			tmp_value = fabs(new[i*au_channels+ichn]);
-			tmp_rms_sum[ichn] +=  tmp_value * tmp_value; 
-			if ( tmp_peak[ichn] < tmp_value ) {
-				tmp_peak[ichn] = tmp_value;
-			}
-		}
+        frames_counter++;
 
-		frames_counter++;
-		if (frames_counter >= frames_per_three_sec){
-			frames_counter = 0;
+        // each fragment is 3 seconds long
+        if (frames_counter >= frames_per_three_sec){
+            frames_counter = 0;
 
-			for (ichn = 0; ichn < au_channels; ichn++){
-				rms_h[ichn][fragments_counter] = sqrt(2.0 * tmp_rms_sum[ichn] / frames_per_three_sec);
-				peaks_h[ichn][fragments_counter] = tmp_peak[ichn];
+            for (ichn = 0; ichn < au_channels; ichn++){
+                rms_h[ichn][fragments_counter] = sqrt(
+                    2.0 * tmp_rms_sum[ichn] / frames_per_three_sec
+                );
+                peaks_h[ichn][fragments_counter] = tmp_peak[ichn];
 
-				tmp_rms_sum[ichn] = 0.0; tmp_peak[ichn] = 0.0;
-			}
-			fragments_counter++;
-		}
-	}
-	g_free (new);
+                tmp_rms_sum[ichn] = 0.0; tmp_peak[ichn] = 0.0;
+            }
+            fragments_counter++;
+        }
+    }
+    g_free (new);
 
 }
 
+// this is needed for the qsort function
 int compare_doubles (const void *a, const void *b) {
 
-	const double *da = (const double *) a;
-	const double *db = (const double *) b;
+    const double *da = (const double *) a;
+    const double *db = (const double *) b;
 
-	return (*da > *db) - (*da < *db);
+    return (*da > *db) - (*da < *db);
 }
 
+// convert linear data to dB
 double to_db (double x) {
 
-	return (20 * log10(x));
+    return (20 * log10(x));
 }
 
+// output the DR, RMS and peak values to the GUI
+void add_values_to_tree(double dr, double rms, double peak ){
+    static char dr_txt[5];
+    static char peak_txt[10];
+    static char rms_txt[10];
+
+    sprintf (dr_txt, "DR%.0f", dr);
+    sprintf (peak_txt, "%.2f", peak);
+    sprintf (rms_txt, "%.2f", rms);
+
+    GtkTreeIter newItem;
+
+    gtk_list_store_append (dr_tree_model, &newItem );
+    gtk_list_store_set (
+        dr_tree_model, &newItem, 
+        0, cur_track_no, 
+        1, cur_track_artist, 
+        2, cur_track_title,
+        3, dr_txt, 
+        4, peak_txt,
+        5, rms_txt,
+        -1 );
+}
+
+// track decoding finished:
+// calculate the final DR values from the collected data
 void output_close_audio (void) {
 
-	static gint ichn, i, upper_starts, upper_qty;
-	static double tmp_rms_sum_upper[CHANNELS_MAX];
-	static double dr_per_channel[CHANNELS_MAX];
-	static double dr, peak, rms;
-	
-	upper_starts = fragments_counter - (fragments_counter / 5); 
-	upper_qty = (fragments_counter / 5) + 1;
+    static gint ichn, i, upper_starts, upper_qty;
+    static double tmp_rms_sum_upper[CHANNELS_MAX];
+    static double dr_per_channel[CHANNELS_MAX];
+    static double dr, peak, rms;
+    
+    // we need the upper 20% of data
+    upper_starts = fragments_counter - (fragments_counter / 5); 
+    upper_qty = (fragments_counter / 5) + 1;
 
-	dr = 0.0; rms = 0.0; peak = 0.0;
+    dr = 0.0; rms = 0.0; peak = 0.0;
 
-	for (ichn = 0; ichn < au_channels; ichn++ ){
+    for (ichn = 0; ichn < au_channels; ichn++ ){
 
-		qsort(peaks_h[ichn], fragments_counter + 1, sizeof(double), compare_doubles);
-		qsort(rms_h[ichn], fragments_counter + 1, sizeof(double), compare_doubles);
+        qsort ( peaks_h[ichn], 
+            fragments_counter + 1, sizeof(double), compare_doubles );
+        qsort ( rms_h[ichn], 
+            fragments_counter + 1, sizeof(double), compare_doubles );
 
-		tmp_rms_sum_upper[ichn] = 0.0;
+        tmp_rms_sum_upper[ichn] = 0.0;
 
-		for (i = upper_starts; i <= fragments_counter ; i++) {
-			tmp_rms_sum_upper[ichn] += rms_h[ichn][i] * rms_h[ichn][i];
-		}
-		tmp_rms_sum[ichn] = tmp_rms_sum_upper[ichn];
-		for (i = 0 ; i < upper_starts; i++){
-			tmp_rms_sum[ichn] += rms_h[ichn][i] * rms_h[ichn][i];
-		}
-		dr_per_channel[ichn] = to_db(peaks_h[ichn][fragments_counter - 1] 
-			/ sqrt(tmp_rms_sum_upper[ichn] / upper_qty));
-		dr += dr_per_channel[ichn];
+        for (i = upper_starts; i <= fragments_counter ; i++) {
+            tmp_rms_sum_upper[ichn] += rms_h[ichn][i] * rms_h[ichn][i];
+        }
+        tmp_rms_sum[ichn] = tmp_rms_sum_upper[ichn];
+        for (i = 0 ; i < upper_starts; i++){
+            tmp_rms_sum[ichn] += rms_h[ichn][i] * rms_h[ichn][i];
+        }
+        dr_per_channel[ichn] = to_db(peaks_h[ichn][fragments_counter - 1] 
+            / sqrt(tmp_rms_sum_upper[ichn] / upper_qty));
+        dr += dr_per_channel[ichn];
 
-		if (peaks_h[ichn][fragments_counter] > peak) {
-			peak = peaks_h[ichn][fragments_counter];
-		}
-		tmp_rms_sum[ichn] = sqrt(tmp_rms_sum[ichn] / fragments_counter);
-		rms += tmp_rms_sum[ichn];
-	}
+        if (peaks_h[ichn][fragments_counter] > peak) {
+            peak = peaks_h[ichn][fragments_counter];
+        }
+        tmp_rms_sum[ichn] = sqrt(tmp_rms_sum[ichn] / fragments_counter);
+        rms += tmp_rms_sum[ichn];
 
-	dr = round( dr / au_channels);
-	peak = to_db(peak);
-	rms = to_db(rms / au_channels);
+        // put the values for each channel to the playlist struct
+        tracks_list_set_value_chan(playlist, playlist->now_playing, 
+            T_INFO_DR, ichn, dr_per_channel[ichn] );
+        tracks_list_set_value_chan(playlist, playlist->now_playing, 
+            T_INFO_RMS, ichn, to_db(tmp_rms_sum[ichn]) );
+        tracks_list_set_value_chan(playlist,playlist->now_playing, 
+            T_INFO_PEAK, ichn, to_db(peaks_h[ichn][fragments_counter]) );
+    }
 
-	static char dr_txt[5];
-	static char peak_txt[10];
-	static char rms_txt[10];
+    dr = round( dr / au_channels);
+    peak = to_db(peak);
+    rms = to_db(rms / au_channels);
 
-	sprintf (dr_txt, "DR%.0f", dr);
-	sprintf (peak_txt, "%.2f", peak);
-	sprintf (rms_txt, "%.2f", rms);
+    tracks_list_set_value(playlist, playlist->now_playing, T_INFO_DR, &dr);
+    tracks_list_set_value(playlist, playlist->now_playing, T_INFO_RMS, &rms);
+    tracks_list_set_value(playlist, playlist->now_playing, T_INFO_PEAK, &peak);
 
-	GtkTreeIter newItem;
-
-	gtk_list_store_append (dr_tree_model, &newItem );
-	gtk_list_store_set (
-		dr_tree_model, &newItem, 
-		0, cur_track_no, 
-		1, cur_track_artist, 
-		2, cur_track_title,
-		3, dr_txt, 
-		4, peak_txt,
-		5, rms_txt,
-		-1 );
+    add_values_to_tree(dr, rms, peak);
 }
 
+// OutputAPI->pause
 void output_pause (gboolean pause) {
 }
 
+// OutputAPI->flush
 void output_flush (gint time) {
 }
 
+// OutputAPI->written_time
 gint output_written_time (void) {
-	return 0;
+    return 0;
 }
 
+// OutputAPI->buffer_playing
 gboolean output_buffer_playing (void) {
-	return FALSE;
+    return FALSE; // no bufferring
 }
 
+// OutputAPI->abort_write
 void output_abort_write (void) {
 }
 
+
+// InputPlayback->set_data
 void ip_set_data (InputPlayback * p, void * data){
 }
 
+// InputPlayback->get_data
 void * ip_get_data (InputPlayback * p) {
-	return NULL;
+    return NULL;
 }
 
+// InputPlayback->set_pb_ready
 void ip_set_pb_ready (InputPlayback * p) {
 }
 
-void ip_set_params (InputPlayback * p, gint bitrate, gint samplerate, gint channels) {
+// InputPlayback->set_params
+void ip_set_params (InputPlayback * p, 
+    gint bitrate, gint samplerate, gint channels) {
 }
 
+// InputPlayback->set_tuple
 void ip_set_tuple (InputPlayback * playback, Tuple * tuple) {
 }
 
+// InputPlayback->set_gain_from_playlist
 void ip_set_gain_from_playlist (InputPlayback * playback) {
 }
 
-
+// a callback function for the EXECUTE button
 static void calc_entire_playlist_dr( void ) {      
     gint playlist_num;
-	gint playlist_entry_count;
-	
-	playlist_num = aud_playlist_get_active();
-	playlist_entry_count = aud_playlist_entry_count(playlist_num);
-	
-	int i;
-	gboolean dec_status;
-	PluginHandle * decoder;
-	InputPlugin * decoder_cur;
-	
-	static struct OutputAPI output_api = {
-		.open_audio = output_open_audio,
-		.set_replaygain_info = output_set_replaygain_info,
-		.write_audio = output_write_audio,
-		.close_audio = output_close_audio,
+    gint playlist_entry_count;
+    
+    playlist_num = aud_playlist_get_active();
+    playlist_entry_count = aud_playlist_entry_count(playlist_num);
+    
+    int i;
+    gboolean dec_status;
+    PluginHandle * decoder;
+    InputPlugin * decoder_cur;
+    
+    static struct OutputAPI output_api = {
+        .open_audio = output_open_audio,
+        .set_replaygain_info = output_set_replaygain_info,
+        .write_audio = output_write_audio,
+        .close_audio = output_close_audio,
 
-		.pause = output_pause,
-		.flush = output_flush,
-		.written_time = output_written_time,
-		.buffer_playing = output_buffer_playing,
-		.abort_write = output_abort_write,
-	};
+        .pause = output_pause,
+        .flush = output_flush,
+        .written_time = output_written_time,
+        .buffer_playing = output_buffer_playing,
+        .abort_write = output_abort_write,
+    };
 
-	static InputPlayback playback_api = {
-		.output = & output_api,
-		.set_data = ip_set_data,
-		.get_data = ip_get_data,
-		.set_pb_ready = ip_set_pb_ready,
-		.set_params = ip_set_params,
-		.set_tuple = ip_set_tuple,
-		.set_gain_from_playlist = ip_set_gain_from_playlist,
-	};
+    static InputPlayback playback_api = {
+        .output = & output_api,
+        .set_data = ip_set_data,
+        .get_data = ip_get_data,
+        .set_pb_ready = ip_set_pb_ready,
+        .set_params = ip_set_params,
+        .set_tuple = ip_set_tuple,
+        .set_gain_from_playlist = ip_set_gain_from_playlist,
+    };
 
-	gtk_list_store_clear (dr_tree_model);
+    gtk_list_store_clear (dr_tree_model);
 
-	char status_message[50];
+    char status_message[50];
 
-	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), 0);
-	while( gtk_events_pending() ) gtk_main_iteration();
-	
-	for ( i=0; i<playlist_entry_count; i++ ) {
+    // zero the progress bar
+    gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), 0);
+    while( gtk_events_pending() ) gtk_main_iteration();
 
-		sprintf(status_message, "Processing track %i of %i", i+1, playlist_entry_count);
-		gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar),0);
-		gtk_statusbar_push(GTK_STATUSBAR(status_bar),0, status_message);
-		while( gtk_events_pending() ) gtk_main_iteration();
+    // allocate memory for the playlist structure
+    if (playlist != NULL ) tracks_list_free(playlist);
+    playlist = tracks_list_new(playlist_entry_count);
+    
+    // process the tracks
+    for ( i=0; i<playlist_entry_count; i++ ) {
 
-		char * entry_filename = aud_playlist_entry_get_filename(playlist_num, i);
+        // update the status bar
+        sprintf(status_message, 
+            "Processing track %i of %i", i+1, playlist_entry_count);
+        gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar),0);
+        gtk_statusbar_push(GTK_STATUSBAR(status_bar),0, status_message);
+        while( gtk_events_pending() ) gtk_main_iteration();
 
-		Tuple *tuple = NULL;
-		tuple = aud_playlist_entry_get_tuple (playlist_num, i, FALSE);
-		cur_track_artist = tuple_get_str (tuple, FIELD_ARTIST, NULL);
-		cur_track_title = tuple_get_str (tuple, FIELD_TITLE, NULL);
-		cur_track_no = i + 1;
+        // get the file name for the current track
+        char * entry_filename = aud_playlist_entry_get_filename(playlist_num, i);
 
-		tuple_unref(tuple);
+        // get a tuple which contains all track meta data
+        Tuple *tuple = NULL;
+        tuple = aud_playlist_entry_get_tuple (playlist_num, i, FALSE);
 
-		decoder = aud_playlist_entry_get_decoder(playlist_num, i, FALSE);
-		decoder_cur = aud_plugin_get_header( decoder );
-		VFSFile * file = vfs_fopen (entry_filename, "r");		
-		dec_status = decoder_cur->play (& playback_api, entry_filename, file, -1, -1, FALSE);
-		
-		str_unref(cur_track_title);
-		str_unref(cur_track_artist);
+        // retrieve meta data from the received tuple 
+        cur_track_artist = tuple_get_str (tuple, FIELD_ARTIST, NULL);
+        cur_track_title = tuple_get_str (tuple, FIELD_TITLE, NULL);
+        cur_track_album = tuple_get_str (tuple, FIELD_ALBUM, NULL);
 
-		str_unref(entry_filename);
+        // populate the `playlist` structure with this meta data
+        tracks_list_set_value(playlist, i, T_INFO_FILENAME, entry_filename);
+        tracks_list_set_value(playlist, i, T_INFO_TITLE, cur_track_title);
+        tracks_list_set_value(playlist, i, T_INFO_ARTIST, cur_track_artist);
+        tracks_list_set_value(playlist, i, T_INFO_ALBUM, cur_track_album);
+        playlist->now_playing = i;
 
-		gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), ((double)i+1)/(double)playlist_entry_count);
-		while( gtk_events_pending() ) gtk_main_iteration();
-	}
+        // we'll get rid of this later, 
+        // as playlist->now_playing contain this data
+        cur_track_no = i + 1;
 
-	gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar), 0);
-	gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "Done");
-	while( gtk_events_pending() ) gtk_main_iteration();
+        // free up the tuple
+        tuple_unref(tuple);
+
+        // start decoding the track
+        decoder = aud_playlist_entry_get_decoder(playlist_num, i, FALSE);
+        decoder_cur = aud_plugin_get_header( decoder );
+        VFSFile * file = vfs_fopen (entry_filename, "r");       
+        dec_status = decoder_cur->play(
+            &playback_api, entry_filename, file, -1, -1, FALSE);
+
+        if (dec_status != 0) {
+            // do something
+        }
+        
+        // free up the strings we don't need any more
+        str_unref(cur_track_title);
+        str_unref(cur_track_artist);
+        str_unref(cur_track_album);
+
+        str_unref(entry_filename);
+
+        // update the progress bar
+        gtk_progress_bar_set_fraction(
+            GTK_PROGRESS_BAR(main_progress_bar), 
+            ((double)i+1)/(double)playlist_entry_count );
+        while( gtk_events_pending() ) gtk_main_iteration();
+    }
+
+    // update the status bar
+    gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar), 0);
+    gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "Done");
+    while( gtk_events_pending() ) gtk_main_iteration();
 }
 
+// a callback function for the SAVE button
 static void dr_save_to_file(void) {
-	
-	GtkWidget *dialog;
+    
+    GtkWidget *dialog;
 
-	dialog = gtk_file_chooser_dialog_new ("Save File",
-		NULL,
-		GTK_FILE_CHOOSER_ACTION_SAVE,
-		GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-		GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
-		NULL);
-	gtk_file_chooser_set_do_overwrite_confirmation (GTK_FILE_CHOOSER (dialog), TRUE);
+    dialog = gtk_file_chooser_dialog_new ("Save File",
+        NULL,
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+        GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
+        NULL);
+    gtk_file_chooser_set_do_overwrite_confirmation (
+        GTK_FILE_CHOOSER (dialog), TRUE );
 
-	gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (dialog), g_get_home_dir());
-	gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER (dialog), "dr_meter_data.txt");
+    // ergh, later we'll want to change g_get_home_dir() to smth else
+    gtk_file_chooser_set_current_folder(
+        GTK_FILE_CHOOSER (dialog), g_get_home_dir() );
 
-	if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
-	{
-		char *filename;
+    gtk_file_chooser_set_current_name (
+        GTK_FILE_CHOOSER (dialog), "dr_meter_data.txt" );
 
-		filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-		// save data to a file here
+    if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        char *filename;
 
-		g_free (filename);
-	}
+        filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
 
-	gtk_widget_destroy (dialog);
+        // add some file & directory name checks
+
+        // save data to a file
+
+        FILE *file; 
+        file = fopen(filename,"w");
+
+        // print a header
+
+        fprintf(file, "Audacious / Dynamic Range Meter v%s\n",DR_METER_VERSION);
+
+        time_t timer; 
+        timer=time(NULL);
+        fprintf(file, "Log date: %s\n", asctime(localtime(&timer)));
+
+        // print the rest of data
+
+        if (playlist != NULL) {
+
+            static int i, j;
+            for (i=0; i < playlist->qty; i++){
+                fprintf(file, "%i - %s - %s - [DR%.0f]  RMS: %.2fdB Peak: %.2fdB\n", 
+                    i + 1,  
+                    (char *)(tracks_list_get_value(playlist, i, T_INFO_TITLE)),
+                    (char *)(tracks_list_get_value(playlist, i, T_INFO_ARTIST)),
+                    *((double *)tracks_list_get_value(playlist, i, T_INFO_DR)),
+                    *((double *)tracks_list_get_value(playlist, i, T_INFO_RMS)),
+                    *((double *)tracks_list_get_value(playlist, i, T_INFO_PEAK))
+                    );
+
+                fprintf(file, "  URL: %s\n", 
+                (char *)(tracks_list_get_value(playlist, i, T_INFO_FILENAME)));
+
+                track_info_t *tmp = &playlist->tracks[i];
+                for (j=0; j < tmp->channels; j++){
+                    fprintf(file, "  chn %i DR: %.2f RMS: %.2fdB Peak: %.2fdB\n", 
+                        j, tmp->chan_dr[j], tmp->chan_rms[j], tmp->chan_peaks[j] 
+                    );
+                }
+
+            }
+        }
+        
+        fclose(file);
+
+        g_free (filename);
+    }
+
+    gtk_widget_destroy (dialog);
 }
 
+// AUD_GENERAL_PLUGIN->init
 gboolean dr_meter_init(void) {
 
-	return TRUE;
-}
+    playlist = NULL;
+    return TRUE;
+} 
 
+// AUD_GENERAL_PLUGIN->configure
 static void dr_meter_configure(void) {
 
 }
 
 AUD_GENERAL_PLUGIN
 (
-	.name = "Dynamic Range Meter",
-	.cleanup = dr_meter_cleanup,
-	.get_widget = dr_meter_get_widget,
-	.init = dr_meter_init,
-	.about = dr_meter_about,
-	.configure = dr_meter_configure
+    .name = "Dynamic Range Meter",
+    .cleanup = dr_meter_cleanup,
+    .get_widget = dr_meter_get_widget,
+    .init = dr_meter_init,
+    .about = dr_meter_about,
+    .configure = dr_meter_configure
 )
 
