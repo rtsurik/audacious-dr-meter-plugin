@@ -13,17 +13,12 @@ SO_LIB = dr_meter.so
 build: $(SO_LIB)
 
 clean: 
-	rm -f $(SO_LIB) *.o test
+	rm -f $(SO_LIB) *.o
 
 $(SO_LIB): dr_meter.c
 	$(CC) -c dr_meter.c -o dr_meter.o $(INCLUDE) $(CFLAGS) $(INCLUDE)
 	$(CC) -c dr_playlist.c -o dr_playlist.o $(CFLAGS)
 	$(CC) -o dr_meter.so -shared $(LDFLAGS) $(LIBS) *.o
-
-test: test.c
-	$(CC) -c test.c -o test.o $(CFLAGS)
-	$(CC) -c dr_playlist.c -o dr_playlist.o $(CFLAGS)
-	$(CC) -o test *.o
 
 install: build
 	cp dr_meter.so /usr/lib/audacious/General/

@@ -38,7 +38,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define DR_METER_VERSION "20120623-alpha"
+#define DR_METER_VERSION "20120715-alpha"
 
 static void calc_entire_playlist_dr(void);
 static void dr_save_to_file(void);
