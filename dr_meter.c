@@ -23,7 +23,8 @@
 
 #include <audacious/debug.h>
 #include <audacious/drct.h>
-#include <audacious/gtk-compat.h>
+// removed in audacious 3.3.x
+// #include <audacious/gtk-compat.h>
 #include <audacious/misc.h>
 #include <audacious/playlist.h>
 
@@ -234,62 +235,6 @@ gint output_open_audio (gint format, gint rate, gint channels) {
 void output_set_replaygain_info (ReplayGainInfo *info) {
 }
 
-// OutputAPI->write_audio:
-// this callback function receives decoded audio data
-// which we process in here and use to calculate DR
-void output_write_audio (void *data, gint length) {
-
-    // actually, I'm not sure if the length is always 
-    // multiple of (channels * bytes per sample), suppose it is 
-    // but this needs to be re-checked
-            
-    int samples = length / FMT_SIZEOF (au_format);
-    int frames = samples / au_channels;
-
-    // allocate memory for the received data
-    float *new = g_malloc(sizeof(float) * samples);
-
-    if (au_format != FMT_FLOAT)
-    {   // if integer, convert to float
-        audio_from_int (data, au_format, new, samples);
-    } else { // if float, leave as is: just copy
-        memcpy(new, data, sizeof (float) * samples);
-    }
-
-    static int i, ichn;
-    static double tmp_value;
-
-    for (i = 0; i < frames; i++){
-
-        for (ichn = 0; ichn < au_channels; ichn++){
-            tmp_value = fabs(new[i*au_channels+ichn]);
-            tmp_rms_sum[ichn] +=  tmp_value * tmp_value; 
-            if ( tmp_peak[ichn] < tmp_value ) {
-                tmp_peak[ichn] = tmp_value;
-            }
-        }
-
-        frames_counter++;
-
-        // each fragment is 3 seconds long
-        if (frames_counter >= frames_per_three_sec){
-            frames_counter = 0;
-
-            for (ichn = 0; ichn < au_channels; ichn++){
-                rms_h[ichn][fragments_counter] = sqrt(
-                    2.0 * tmp_rms_sum[ichn] / frames_per_three_sec
-                );
-                peaks_h[ichn][fragments_counter] = tmp_peak[ichn];
-
-                tmp_rms_sum[ichn] = 0.0; tmp_peak[ichn] = 0.0;
-            }
-            fragments_counter++;
-        }
-    }
-    g_free (new);
-
-}
-
 // this is needed for the qsort function
 int compare_doubles (const void *a, const void *b) {
 
@@ -329,10 +274,17 @@ void add_values_to_tree(double dr, double rms, double peak ){
         -1 );
 }
 
-// track decoding finished:
-// calculate the final DR values from the collected data
-void output_close_audio (void) {
+// OutputAPI->write_audio:
+// this callback function receives decoded audio data
+// which we process in here and use to calculate DR
+void output_write_audio (void *data, gint length) {
 
+    if (length == 0) { // output_close_audio()
+    /* 
+      prior to Audacious 3.3 there was a separate callback,
+      OutputAPI -> .close_audio which has been removed now, 
+      so we're moving the code in here
+    */
     static gint ichn, i, upper_starts, upper_qty;
     static double tmp_rms_sum_upper[CHANNELS_MAX];
     static double dr_per_channel[CHANNELS_MAX];
@@ -388,6 +340,66 @@ void output_close_audio (void) {
     tracks_list_set_value(playlist, playlist->now_playing, T_INFO_PEAK, &peak);
 
     add_values_to_tree(dr, rms, peak);
+    } // output_close_audio() end.
+
+    // actually, I'm not sure if the length is always 
+    // multiple of (channels * bytes per sample), suppose it is 
+    // but this needs to be re-checked
+            
+    int samples = length / FMT_SIZEOF (au_format);
+    int frames = samples / au_channels;
+
+    // allocate memory for the received data
+    float *new = g_malloc(sizeof(float) * samples);
+
+    if (au_format != FMT_FLOAT)
+    {   // if integer, convert to float
+        audio_from_int (data, au_format, new, samples);
+    } else { // if float, leave as is: just copy
+        memcpy(new, data, sizeof (float) * samples);
+    }
+
+    static int i, ichn;
+    static double tmp_value;
+
+    for (i = 0; i < frames; i++){
+
+        for (ichn = 0; ichn < au_channels; ichn++){
+            tmp_value = fabs(new[i*au_channels+ichn]);
+            tmp_rms_sum[ichn] +=  tmp_value * tmp_value; 
+            if ( tmp_peak[ichn] < tmp_value ) {
+                tmp_peak[ichn] = tmp_value;
+            }
+        }
+
+        frames_counter++;
+
+        // each fragment is 3 seconds long
+        if (frames_counter >= frames_per_three_sec){
+            frames_counter = 0;
+
+            for (ichn = 0; ichn < au_channels; ichn++){
+                rms_h[ichn][fragments_counter] = sqrt(
+                    2.0 * tmp_rms_sum[ichn] / frames_per_three_sec
+                );
+                peaks_h[ichn][fragments_counter] = tmp_peak[ichn];
+
+                tmp_rms_sum[ichn] = 0.0; tmp_peak[ichn] = 0.0;
+            }
+            fragments_counter++;
+        }
+    }
+    g_free (new);
+
+}
+
+
+
+// track decoding finished:
+// calculate the final DR values from the collected data
+void output_close_audio (void) {
+    // removed in Audacious 3.3, moving the code to the write_audio callback
+
 }
 
 // OutputAPI->pause
@@ -456,12 +468,12 @@ static void calc_entire_playlist_dr( void ) {
         .open_audio = output_open_audio,
         .set_replaygain_info = output_set_replaygain_info,
         .write_audio = output_write_audio,
-        .close_audio = output_close_audio,
+//        .close_audio = output_close_audio,
 
         .pause = output_pause,
         .flush = output_flush,
         .written_time = output_written_time,
-        .buffer_playing = output_buffer_playing,
+//        .buffer_playing = output_buffer_playing,
         .abort_write = output_abort_write,
     };
 

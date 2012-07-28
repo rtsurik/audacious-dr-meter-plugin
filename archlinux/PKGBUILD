@@ -2,7 +2,7 @@
 # Contributor: Rustam Tsurik <rustam.tsurik@gmail.com>
 
 pkgname=audacious-dr-meter-plugin
-pkgrel=1
+pkgrel=2
 pkgver=20120728
 pkgdesc="A dynamic range mater plugin for Audacious"
 arch=('i686' 'x86_64')
