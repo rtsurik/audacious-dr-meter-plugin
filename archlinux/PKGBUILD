@@ -1,0 +1,42 @@
+# Audacious DR meter plugin, GIT
+# Contributor: Rustam Tsurik <rustam.tsurik@gmail.com>
+
+pkgname=audacious-dr-meter-plugin
+pkgrel=1
+pkgver=20120728
+pkgdesc="A dynamic range mater plugin for Audacious"
+arch=('i686' 'x86_64')
+url="https://github.com/rtsurik/audacious-dr-meter-plugin"
+license=('GPL')
+provides=('audacious-dr-meter-plugin')
+depends=('audacious' 'gtk3')
+makedepends=('git')
+
+_gitname="audacious-dr-meter-plugin"
+_gitroot="git://github.com/rtsurik/${_gitname}.git"
+
+build() {
+  cd "${srcdir}"
+  msg "Connecting to github..."
+
+  if [ -d "${_gitname}" ] ; then
+    cd "${_gitname}" && git pull origin
+    msg "The local files are updated."
+  else
+    git clone "${_gitroot}" "${_gitname}"
+    msg "The repo has been cloned."
+  fi
+
+  msg "Starting a build process..."
+
+  cd ${srcdir}/${_gitname}
+  make
+
+}
+
+package() {
+    cd ${srcdir}/${_gitname}
+    mkdir -p ${pkgdir}/usr/lib/audacious/General/
+    cp dr_meter.so ${pkgdir}/usr/lib/audacious/General/
+    msg "Packaging completed."
+}
