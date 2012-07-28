@@ -20,8 +20,11 @@ and install the plugin under /usr/lib/audacious/General/.
 
 Change the path in Makefile to install under a non-standard directory. 
 
-This plugin depends on GTK+ 3.2 or later, all major desktop distros, e.g. 
-Arch Linux, Fedora and Ubuntu, already provide it.
+Arch Linux users can install it from AUR:
+
+https://aur.archlinux.org/packages.php?ID=61123
+
+This plugin depends on GTK+ 3.2 or later and Audacious 3.3. 
 
 3. TODO
 
