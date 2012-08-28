@@ -23,8 +23,7 @@
 
 #include <audacious/debug.h>
 #include <audacious/drct.h>
-// removed in audacious 3.3.x
-// #include <audacious/gtk-compat.h>
+
 #include <audacious/misc.h>
 #include <audacious/playlist.h>
 
@@ -38,6 +37,7 @@
 #include "dr_playlist.h"
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define DR_METER_VERSION "20120715-alpha"
 
@@ -232,7 +232,7 @@ gint output_open_audio (gint format, gint rate, gint channels) {
 }
 
 // OutputAPI->set_replaygain_info
-void output_set_replaygain_info (ReplayGainInfo *info) {
+void output_set_replaygain_info (const ReplayGainInfo *info) {
 }
 
 // this is needed for the qsort function
@@ -451,8 +451,9 @@ void ip_set_tuple (InputPlayback * playback, Tuple * tuple) {
 void ip_set_gain_from_playlist (InputPlayback * playback) {
 }
 
-// a callback function for the EXECUTE button
-static void calc_entire_playlist_dr( void ) {      
+// payload invoked from calc_entire_playlist_dr()
+void *dr_calc_thread(void *data) {
+
     gint playlist_num;
     gint playlist_entry_count;
     
@@ -468,12 +469,9 @@ static void calc_entire_playlist_dr( void ) {
         .open_audio = output_open_audio,
         .set_replaygain_info = output_set_replaygain_info,
         .write_audio = output_write_audio,
-//        .close_audio = output_close_audio,
-
         .pause = output_pause,
         .flush = output_flush,
         .written_time = output_written_time,
-//        .buffer_playing = output_buffer_playing,
         .abort_write = output_abort_write,
     };
 
@@ -564,6 +562,18 @@ static void calc_entire_playlist_dr( void ) {
     gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar), 0);
     gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "Done");
     while( gtk_events_pending() ) gtk_main_iteration();
+
+    return 0;
+}
+
+
+// a callback function for the EXECUTE button
+static void calc_entire_playlist_dr( void ) {
+    int data = 0; pthread_t thread1;
+    int err = pthread_create( &thread1, NULL, &dr_calc_thread, (void *)data);
+    if (err == 0) { 
+        // do something?
+    }
 }
 
 // a callback function for the SAVE button
