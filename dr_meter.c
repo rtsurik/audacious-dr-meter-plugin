@@ -190,6 +190,8 @@ static gpointer dr_meter_get_widget (void)
     gtk_grid_set_row_spacing(GTK_GRID(main_grid), 5);
     gtk_grid_set_column_homogeneous(GTK_GRID(main_grid), TRUE);
 
+
+    gtk_widget_set_size_request(main_grid, 700, 400);
     return main_grid;
 }
 
