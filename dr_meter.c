@@ -60,6 +60,8 @@ char *cur_track_artist;     // under the calc_entire_playlist_dr() function
 char *cur_track_album;      // as soon as we've switched to the playlist struct
 long cur_track_duration;    
 
+unsigned char track_processed;
+
 gint au_format;
 gint au_channels;
 gint au_rate;
@@ -342,6 +344,7 @@ void output_write_audio (void *data, gint length) {
     tracks_list_set_value(playlist, playlist->now_playing, T_INFO_PEAK, &peak);
 
     add_values_to_tree(dr, rms, peak);
+    track_processed = 1;
     } // output_close_audio() end.
 
     // actually, I'm not sure if the length is always 
@@ -535,22 +538,34 @@ void *dr_calc_thread(void *data) {
         // free up the tuple
         tuple_unref(tuple);
 
+        // free up the strings
+        str_unref(cur_track_title);
+        str_unref(cur_track_artist);
+        str_unref(cur_track_album);
+
+        // and receive the processed values from the playlist struct
+        // e.g. it populates "N/A" string to the empty ones, etc.
+        cur_track_title = tracks_list_get_value(playlist, i, T_INFO_TITLE);
+        cur_track_artist = tracks_list_get_value(playlist, i, T_INFO_ARTIST);
+        cur_track_album = tracks_list_get_value(playlist, i, T_INFO_ALBUM);
+
         // start decoding the track
+        track_processed = 0;
         decoder = aud_playlist_entry_get_decoder(playlist_num, i, FALSE);
         decoder_cur = aud_plugin_get_header( decoder );
         VFSFile * file = vfs_fopen (entry_filename, "r");       
         dec_status = decoder_cur->play(
             &playback_api, entry_filename, file, -1, -1, FALSE);
 
+        if (track_processed == 0) {
+            output_write_audio(NULL, 0);
+        }
+
         if (dec_status != 0) {
             // do something
         }
-        
-        // free up the strings we don't need any more
-        str_unref(cur_track_title);
-        str_unref(cur_track_artist);
-        str_unref(cur_track_album);
 
+        // free up the filename string
         str_unref(entry_filename);
 
         // update the progress bar

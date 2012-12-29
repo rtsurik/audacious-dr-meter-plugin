@@ -53,7 +53,12 @@ void tracks_list_free(tracks_list_t *list) {
 static char *_value_malloc(void *value){
 	int v_size; char *v_str;
 
-	v_size = strlen((char *)value);
+	if (value == NULL ){
+		v_size = 0;
+	} else {
+		v_size = strlen((char *)value);
+	}
+
 	if (v_size == 0){
 		v_size = strlen("N/A");
 		v_str = malloc(v_size+1);
