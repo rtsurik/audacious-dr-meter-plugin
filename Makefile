@@ -3,6 +3,7 @@ LIBS = `pkg-config --libs gtk+-3.0 audacious`
 INCLUDE = `pkg-config --cflags gtk+-3.0 audacious`
 CFLAGS = -Wall -O2 -fPIC -DPIC
 LDFLAGS = -shared
+AU_PLUGINS_DIR = `pkg-config --variable=general_plugin_dir audacious`
 
 
 SO_LIB = dr_meter.so
@@ -21,4 +22,4 @@ $(SO_LIB): dr_meter.c
 	$(CC) -o dr_meter.so -shared $(LDFLAGS) $(LIBS) *.o
 
 install: build
-	cp dr_meter.so /usr/lib/audacious/General/
+	cp dr_meter.so $(AU_PLUGINS_DIR)
