@@ -19,7 +19,7 @@ _gitname="audacious-dr-meter-plugin"
 
 pkgver() {
   cd ${_gitname}
-  git describe --always
+  git describe --always | cut -d- -f1
 }
 
 build() {
