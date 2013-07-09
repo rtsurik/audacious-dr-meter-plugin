@@ -19,4 +19,5 @@ $(SO_LIB): dr_meter.c
 	$(CC) -o dr_meter.so $(LDFLAGS) $(LIBS) *.o
 
 install: build
-	cp dr_meter.so $(AU_PLUGINS_DIR)
+	mkdir -p $(DESTDIR)$(AU_PLUGINS_DIR)
+	cp dr_meter.so $(DESTDIR)$(AU_PLUGINS_DIR)
