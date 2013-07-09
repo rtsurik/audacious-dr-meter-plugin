@@ -1,0 +1,12 @@
+Source: audacious-dr-meter-plugin
+Section: sound
+Priority: extra
+Maintainer: Rustam Tsurik <rustam.tsurik@gmail.com>
+Build-Depends: debhelper (>= 8.0.0), audacious (>= 3.3), audacious-dev (>= 3.3), pkg-config, libgtk-3-dev (>= 3.6)
+Standards-Version: 3.9.4
+Homepage: https://github.com/rtsurik/audacious-dr-meter-plugin
+
+Package: audacious-dr-meter-plugin
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, audacious (>= 3.3)
+Description: A dynamic range meter plugin for Audacious player.
