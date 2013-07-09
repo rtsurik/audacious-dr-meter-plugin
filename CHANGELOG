@@ -1,0 +1,9 @@
+2013-07-09
+
+- Updated Makefile to get rid of hard-coded compiler flags, etc(thanks to Christian Birchinger for sending the patch);
+- Replaced the license file where I mistakenly put GPLv2 instead of simpified BSD which is the intended license;
+- Initial debianization;
+
+2013-04-10
+
+- Updated ArchLinux PKGBUILD
