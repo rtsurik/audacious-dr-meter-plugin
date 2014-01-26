@@ -47,7 +47,7 @@ static void dr_meter_configure(void);
 
 
 tracks_list_t *playlist;
-
+gint calc_thread_status = 0;
 
 GtkListStore *dr_tree_model;
 GtkWidget *main_progress_bar;
@@ -584,6 +584,8 @@ void *dr_calc_thread(void *data) {
 
     while( gtk_events_pending() ) gtk_main_iteration();
 
+    calc_thread_status = 0;
+
     return 0;
 }
 
@@ -591,9 +593,15 @@ void *dr_calc_thread(void *data) {
 // a callback function for the EXECUTE button
 static void calc_entire_playlist_dr( void ) {
     int data = 0; pthread_t thread1;
-    int err = pthread_create( &thread1, NULL, &dr_calc_thread, (void *)data);
-    if (err == 0) { 
-        // do something?
+    // check whether the thread is already running
+    if (calc_thread_status == 0) {
+        calc_thread_status = 1; //need a mutex here?
+        int err = pthread_create( &thread1, NULL, &dr_calc_thread, (void *)data);
+        if (err == 0) { 
+          // do something?
+        }
+    } else {
+        // stop the thread
     }
 }
 
@@ -684,7 +692,6 @@ gboolean dr_meter_init(void) {
 
 // AUD_GENERAL_PLUGIN->configure
 static void dr_meter_configure(void) {
-
 }
 
 AUD_GENERAL_PLUGIN
