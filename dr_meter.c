@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Rustam Tsurik <rustam.tsurik@gmail.com>.
+ * Copyright (c) 2012-2014 Rustam Tsurik <rustam.tsurik@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -39,7 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DR_METER_VERSION "20120715-alpha"
+#define DR_METER_VERSION "20140125-alpha"
 
 static void calc_entire_playlist_dr(void);
 static void dr_save_to_file(void);
@@ -51,7 +51,6 @@ tracks_list_t *playlist;
 
 GtkListStore *dr_tree_model;
 GtkWidget *main_progress_bar;
-GtkWidget *status_bar;
 
 gint cur_track_no = 1;
 
@@ -89,15 +88,24 @@ static void playback_start (gpointer data, GtkWidget *area)
 static gpointer dr_meter_get_widget (void)
 {
     
+    // define elements
+
+    // grid
     GtkWidget *main_grid = gtk_grid_new();
 
-    status_bar = gtk_statusbar_new();   
-    gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "status message");
-
+    // progress bar
     main_progress_bar = gtk_progress_bar_new();
     gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR(main_progress_bar), 0);
+    gtk_widget_set_hexpand (main_progress_bar, TRUE);
+    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(main_progress_bar), TRUE);
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(main_progress_bar), "Press the Exec button");
 
+    // tool bar with buttons
     GtkWidget *toolbar = gtk_toolbar_new();
+
+    gtk_widget_set_hexpand (toolbar, FALSE);
+    g_object_set (G_OBJECT (toolbar), "width-request", 100, NULL);
+    gtk_toolbar_set_icon_size(GTK_TOOLBAR(toolbar), GTK_ICON_SIZE_MENU);
 
     GtkToolItem *button_exec = 
         gtk_tool_button_new_from_stock(GTK_STOCK_EXECUTE);
@@ -123,6 +131,7 @@ static gpointer dr_meter_get_widget (void)
         (GCallback) dr_meter_configure, 
         FALSE);
 
+    // tree view
     GtkWidget *dr_tree_view = gtk_tree_view_new();
 
     GtkCellRenderer *dr_cell_renderer = gtk_cell_renderer_text_new();
@@ -145,6 +154,10 @@ static gpointer dr_meter_get_widget (void)
         GTK_TREE_VIEW (dr_tree_view), -1, "RMS (dB)", dr_cell_renderer, 
         "text", 5, NULL );
 
+    gtk_widget_set_vexpand (dr_tree_view, TRUE);
+    gtk_widget_set_hexpand (dr_tree_view, TRUE);
+
+    // list store
     dr_tree_model = gtk_list_store_new (6, 
         G_TYPE_INT, 
         G_TYPE_STRING, 
@@ -153,9 +166,11 @@ static gpointer dr_meter_get_widget (void)
         G_TYPE_STRING, 
         G_TYPE_STRING );
 
+    // attach the tree view to list store
     gtk_tree_view_set_model (GTK_TREE_VIEW(dr_tree_view), 
         GTK_TREE_MODEL(dr_tree_model) );
 
+    // tree view: set up columns attributes
     GtkTreeViewColumn *this_column = 
         gtk_tree_view_get_column (GTK_TREE_VIEW(dr_tree_view), 1);
     g_object_set (G_OBJECT (this_column), 
@@ -173,25 +188,14 @@ static gpointer dr_meter_get_widget (void)
     g_object_set (G_OBJECT (this_column), 
     "resizable", TRUE, "min-width", 50, NULL);
 
+    // create a scrolled window and put the tree view into it
     GtkWidget *scrolledTreeContainer = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_add_with_viewport( 
-        GTK_SCROLLED_WINDOW(scrolledTreeContainer), dr_tree_view );
+    gtk_container_add(GTK_CONTAINER(scrolledTreeContainer), dr_tree_view);
 
-    gtk_grid_attach(GTK_GRID(main_grid), toolbar, 0, 0, 1, 1);
-
-    gtk_widget_set_vexpand (dr_tree_view, TRUE);
-    gtk_widget_set_valign (dr_tree_view, GTK_ALIGN_FILL);
-
-    gtk_grid_attach_next_to(GTK_GRID(main_grid), 
-        scrolledTreeContainer, toolbar, GTK_POS_BOTTOM, 1, 1);
-    gtk_grid_attach_next_to(GTK_GRID(main_grid), 
-        main_progress_bar, scrolledTreeContainer, GTK_POS_BOTTOM, 1, 1);
-    gtk_grid_attach_next_to(GTK_GRID(main_grid), 
-        status_bar, main_progress_bar, GTK_POS_BOTTOM, 1, 1);
-
-    gtk_grid_set_row_spacing(GTK_GRID(main_grid), 5);
-    gtk_grid_set_column_homogeneous(GTK_GRID(main_grid), TRUE);
-
+    // attach widgets to the grid 
+    gtk_grid_attach(GTK_GRID(main_grid), scrolledTreeContainer, 0, 0, 2, 1);
+    gtk_grid_attach(GTK_GRID(main_grid), toolbar, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(main_grid), main_progress_bar, 1, 1, 1, 1);
 
     gtk_widget_set_size_request(main_grid, 700, 400);
     return main_grid;
@@ -208,7 +212,7 @@ static void dr_meter_about(void) {
 
     audgui_simple_message (& about_dialog, GTK_MESSAGE_INFO, "About DR Meter",
     "Dynamic Range Meter plugin for Audacious.\n\n"
-    "Copyright (c) 2012 Rustam Tsurik");
+    "Copyright (c) 2012-2014 Rustam Tsurik");
 }
 
 // OutputAPI->open_audio:
@@ -508,8 +512,8 @@ void *dr_calc_thread(void *data) {
         // update the status bar
         sprintf(status_message, 
             "Processing track %i of %i", i+1, playlist_entry_count);
-        gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar),0);
-        gtk_statusbar_push(GTK_STATUSBAR(status_bar),0, status_message);
+        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(main_progress_bar), status_message);
+
         while( gtk_events_pending() ) gtk_main_iteration();
 
         // get the file name for the current track
@@ -576,8 +580,8 @@ void *dr_calc_thread(void *data) {
     }
 
     // update the status bar
-    gtk_statusbar_remove_all(GTK_STATUSBAR(status_bar), 0);
-    gtk_statusbar_push(GTK_STATUSBAR(status_bar), 0, "Done");
+    gtk_progress_bar_set_text(GTK_PROGRESS_BAR(main_progress_bar), "Done");
+
     while( gtk_events_pending() ) gtk_main_iteration();
 
     return 0;

@@ -1,6 +1,6 @@
 A dynamic range meter plugin for Audacious player
 
-Copyright (C) 2012-2013 Rustam Tsurik
+Copyright (C) 2012-2014 Rustam Tsurik
 
 TABLE OF CONTENTS
 
@@ -30,8 +30,6 @@ This plugin depends on GTK+ 3.2 or later and Audacious 3.3.
 
 The next things that may need attention are:
 
- - put processing to a separate thread, the window is currently unresponsive 
-   while DR is being calculated, so it needs to be separated from GUI.
  - improve GUI: add sorting by a specific column(artist/title/DR/..), 
    probably move the progress bar to the top, etc.
  - add some configurable options to the 'Preferences' window.
