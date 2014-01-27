@@ -1,3 +1,11 @@
+audacious-dr-meter-plugin (20140127-1) unstable; urgency=low
+
+  * Slight layout update
+  * Put DR processing to a separate thread
+  * Misc bugfixes
+
+ -- Rustam Tsurik <rustam.tsurik@gmail.com>  Mon, 27 Jan 2014 19:48:15 +0200
+
 audacious-dr-meter-plugin (20130709-1) unstable; urgency=low
 
   * Initial release

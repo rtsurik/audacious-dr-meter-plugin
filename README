@@ -28,14 +28,7 @@ This plugin depends on GTK+ 3.2 or later and Audacious 3.3.
 
 3. TODO
 
-The next things that may need attention are:
-
- - improve GUI: add sorting by a specific column(artist/title/DR/..), 
-   probably move the progress bar to the top, etc.
- - add some configurable options to the 'Preferences' window.
- - implement the album mode, i.e. when all tracks that belong to the same 
-   album are recognized as a single track and DR is calculated for the entire 
-   album.
+At this point, I'm not using this plugin much, so it is not likely to be developed it any further.
 
 4. CONTACTS
 
