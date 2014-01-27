@@ -107,8 +107,8 @@ static gpointer dr_meter_get_widget (void)
     g_object_set (G_OBJECT (toolbar), "width-request", 100, NULL);
     gtk_toolbar_set_icon_size(GTK_TOOLBAR(toolbar), GTK_ICON_SIZE_MENU);
 
-    GtkToolItem *button_exec = 
-        gtk_tool_button_new_from_stock(GTK_STOCK_EXECUTE);
+    GtkWidget *icon_exec = gtk_image_new_from_icon_name("gtk-execute", GTK_ICON_SIZE_MENU);
+    GtkToolItem *button_exec = gtk_tool_button_new(icon_exec, "exec");
 
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_exec, -1); 
     g_signal_connect(button_exec, 
@@ -116,15 +116,18 @@ static gpointer dr_meter_get_widget (void)
         (GCallback) calc_entire_playlist_dr, 
         FALSE);
 
-    GtkToolItem *button_save =  gtk_tool_button_new_from_stock(GTK_STOCK_SAVE);
+    GtkWidget *icon_save = gtk_image_new_from_icon_name("gtk-save", GTK_ICON_SIZE_MENU);
+    GtkToolItem *button_save = gtk_tool_button_new(icon_save, "save"); 
+
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_save, -1); 
     g_signal_connect(button_save, 
         "clicked", 
         (GCallback) dr_save_to_file, 
         FALSE);
 
-    GtkToolItem *button_properties =  
-        gtk_tool_button_new_from_stock(GTK_STOCK_PROPERTIES);
+    GtkWidget *icon_properties = gtk_image_new_from_icon_name("gtk-properties", GTK_ICON_SIZE_MENU);
+    GtkToolItem *button_properties = gtk_tool_button_new(icon_properties, "prop"); 
+
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), button_properties, -1); 
     g_signal_connect(button_properties, 
         "clicked", 
@@ -613,8 +616,8 @@ static void dr_save_to_file(void) {
     dialog = gtk_file_chooser_dialog_new ("Save File",
         NULL,
         GTK_FILE_CHOOSER_ACTION_SAVE,
-        GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-        GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
+        "Cancel", GTK_RESPONSE_CANCEL,
+        "Save", GTK_RESPONSE_ACCEPT,
         NULL);
     gtk_file_chooser_set_do_overwrite_confirmation (
         GTK_FILE_CHOOSER (dialog), TRUE );
